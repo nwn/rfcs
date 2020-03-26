@@ -8,10 +8,28 @@
 
 One paragraph explanation of the feature.
 
+- Allow shorthand syntax for arrays with the same element repeated at the end: `[1, 2, 3, ..0]`.
+
 # Motivation
 [motivation]: #motivation
 
 Why are we doing this? What use cases does it support? What is the expected outcome?
+
+- In C and C++, it is common to define arrays by their first few elements, letting the remainder be default-initialized, like so:
+``` C++
+int int_array[6] = {1, 2, 3}; // Final elements initialized to 0
+array<string_view, 6> str_array = {"Hello", "World"}; // Final elements initialized to ""
+```
+Rust currently has no analogous syntax. We propose to fill this gap with the following syntax:
+``` Rust
+let int_array: [i32; 6] = [1, 2, 3, ..0];
+let str_array: [&str; 6] = ["Hello", "World", ..""];
+```
+
+This syntax is in fact more powerful than the C/C++ version in that it supports arbitrary `Copy` values to be filled into the array:
+``` Rust
+let mostly_some: [Option<f32>; 100] = [Some(0.0), Some(1.0), None, ..Some(-1.0)];
+```
 
 # Guide-level explanation
 [guide-level-explanation]: #guide-level-explanation
@@ -42,12 +60,20 @@ The section should return to the examples given in the previous section, and exp
 
 Why should we *not* do this?
 
+- Breaks arrays of RangeTo (`[..1, ..2, ..3]`)
+- Doesn't work in pattern position (unexpectedly due to unstable half-open range patterns; RangeTo doesn't work unparenthesized in patterns)
+- Only affects a single run of identical elements at the end of an array (can't do `[1, ..2, ..3]`)
+
 # Rationale and alternatives
 [rationale-and-alternatives]: #rationale-and-alternatives
 
 - Why is this design the best in the space of possible designs?
 - What other designs have been considered and what is the rationale for not choosing them?
 - What is the impact of not doing this?
+
+- Reflective of the update-syntax in struct expressions.
+- Currently not possible with `macro_rules!` since "repeat N times" is not expressible. Possibly with macros 2.0?
+- A more general syntax for run-length encoding array literals. This would solve the earlier drawback of multiple runs. However, in the real world, most cases involving multiple runs would require sufficient granularity that such a feature would provide little benefit.
 
 # Prior art
 [prior-art]: #prior-art
@@ -73,6 +99,9 @@ Please also take into consideration that rust sometimes intentionally diverges f
 - What parts of the design do you expect to resolve through the implementation of this feature before stabilization?
 - What related issues do you consider out of scope for this RFC that could be addressed in the future independently of the solution that comes out of this RFC?
 
+- Should we warn/err when a fill expression would expand to 0 entries? Clippy?
+- Should this allow `!Copy` types if the expression does not expand to more than one entry? This aligns with the `[vec![]; 1]` syntax.
+
 # Future possibilities
 [future-possibilities]: #future-possibilities
 
@@ -93,3 +122,5 @@ Note that having something written down in the future-possibilities section
 is not a reason to accept the current or a future RFC; such notes should be
 in the section on motivation or rationale in this or subsequent RFCs.
 The section merely provides additional information.
+
+- This could be extended to allow middle-filling: `[1, 2, ..3, 2, 1]`
