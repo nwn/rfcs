@@ -8,14 +8,22 @@
 
 One paragraph explanation of the feature.
 
-- Allow shorthand syntax for arrays with the same element repeated at the end: `[1, 2, 3, ..0]`.
+---
+
+Allow shorthand syntax for array literals with the same element repeated at the end. For example:
+``` Rust
+let x: [i32; 6] = [1, 2, 3, ..0]; // The last 3 elements are 0
+assert_eq!(x, [1, 2, 3, 0, 0, 0]);
+```
 
 # Motivation
 [motivation]: #motivation
 
 Why are we doing this? What use cases does it support? What is the expected outcome?
 
-- In C and C++, it is common to define arrays by their first few elements, letting the remainder be default-initialized, like so:
+---
+
+In C and C++, it is common to define arrays by their first few elements, letting the remainder be default-initialized, like so:
 ``` C++
 int int_array[6] = {1, 2, 3}; // Final elements initialized to 0
 array<string_view, 6> str_array = {"Hello", "World"}; // Final elements initialized to ""
@@ -60,6 +68,8 @@ The section should return to the examples given in the previous section, and exp
 
 Why should we *not* do this?
 
+---
+
 - Breaks arrays of RangeTo (`[..1, ..2, ..3]`)
 - Doesn't work in pattern position (unexpectedly due to unstable half-open range patterns; RangeTo doesn't work unparenthesized in patterns)
 - Only affects a single run of identical elements at the end of an array (can't do `[1, ..2, ..3]`)
@@ -70,6 +80,8 @@ Why should we *not* do this?
 - Why is this design the best in the space of possible designs?
 - What other designs have been considered and what is the rationale for not choosing them?
 - What is the impact of not doing this?
+
+---
 
 - Reflective of the update-syntax in struct expressions.
 - Currently not possible with `macro_rules!` since "repeat N times" is not expressible. Possibly with macros 2.0?
@@ -92,12 +104,20 @@ If there is no prior art, that is fine - your ideas are interesting to us whethe
 Note that while precedent set by other languages is some motivation, it does not on its own motivate an RFC.
 Please also take into consideration that rust sometimes intentionally diverges from common language features.
 
+---
+
+As described [above](#motivation), a similar syntax is present in C and C++. In C, missing elements in an initializer are implicitly initialized to zero (NULL, etc.). C++ improves on this design by default-initializing any missing elements, allowing for more complex types in this position.
+
+Both C and C++ suffer from the problem that arrays are _silently_ and _implicitly_ filled when elements are missing. This can lead to unexpected behaviour and bugs. Still, the convenience of this feature means that it continues to be used frequently. The proposed feature solves this problem while improving usability by making the behaviour explicit and opt-in, and by using only a user-defined value.
+
 # Unresolved questions
 [unresolved-questions]: #unresolved-questions
 
 - What parts of the design do you expect to resolve through the RFC process before this gets merged?
 - What parts of the design do you expect to resolve through the implementation of this feature before stabilization?
 - What related issues do you consider out of scope for this RFC that could be addressed in the future independently of the solution that comes out of this RFC?
+
+---
 
 - Should we warn/err when a fill expression would expand to 0 entries? Clippy?
 - Should this allow `!Copy` types if the expression does not expand to more than one entry? This aligns with the `[vec![]; 1]` syntax.
@@ -122,5 +142,7 @@ Note that having something written down in the future-possibilities section
 is not a reason to accept the current or a future RFC; such notes should be
 in the section on motivation or rationale in this or subsequent RFCs.
 The section merely provides additional information.
+
+---
 
 - This could be extended to allow middle-filling: `[1, 2, ..3, 2, 1]`
