@@ -43,7 +43,7 @@ let mostly_some: [Option<f32>; 100] = [Some(0.0), Some(1.0), None, ..Some(-1.0)]
 
 ### Code readability
 
-Repetion in code can both be a source of bugs and reduce the readability of the code. A large array wherein most of the elements are identical is not currently obvious with the existing syntax. A reader of the code would be required to scan the entire array to determine any deviance.
+Repetition in code can both be a source of bugs and reduce the readability of the code. A large array wherein most of the elements are identical is not currently obvious with the existing syntax. A reader of the code would be required to scan the entire array to determine any deviance.
 
 The proposed syntax makes this both more convenient when writing such code and more clear when reading such code.
 
@@ -108,11 +108,17 @@ This syntax does not afford extensions to arbitrary run-length encoded arrays, a
 
 ### Rationale
 
+The proposed syntax was chosen mainly for its familiarity. It is more intuitive for newcomers since the `..` acts similarly to the ellipsis in both English and mathematical notation. It also reflects the meaning of the `..` in the struct update syntax, namely "copy/move the remaining fields/elements from what follows".
+
 - Reflective of the update-syntax in struct expressions.
 - Currently not possible with `macro_rules!` since "repeat N times" is not expressible. Possibly with macros 2.0?
 
 ### Alternatives
 [alternatives]: #alternatives
+
+- Implementing this as a macro in either std or an external crate. Not sure if this is actually possible for compile-time evaluation without `const` loops.
+
+- Extend the repeat-syntax instead of the expanded syntax. This makes the length explicit, but the syntax would be less intuitive and noticeable: `assert_eq!([1, 2, 3, 3, 3], [1, 2, 3; 5])`.
 
 - A more general syntax for run-length encoding array literals. This would solve the earlier drawback of multiple runs. However, in the real world, most cases involving multiple runs would require sufficient granularity that such a feature would provide little benefit.
 
@@ -135,7 +141,7 @@ Please also take into consideration that rust sometimes intentionally diverges f
 
 ---
 
-As described [above](#motivation), a similar syntax is present in C and C++. In C, missing elements in an initializer are implicitly initialized to zero (NULL, etc.). C++ improves on this design by default-initializing any missing elements, allowing for more complex types in this position.
+As described [above](#motivation), a similar feature is present in C and C++. In C, missing elements in an initializer are implicitly initialized to zero (NULL, etc.). C++ improves on this design by default-initializing any missing elements, allowing for more complex types in this position.
 
 Both C and C++ suffer from the problem that arrays are _silently_ and _implicitly_ filled when elements are missing. This can lead to unexpected behaviour and bugs. Still, the convenience of this feature means that it continues to be used frequently. The proposed feature solves this problem while improving usability by making the behaviour explicit and opt-in, and by using only a user-defined value.
 
