@@ -74,6 +74,33 @@ The section should return to the examples given in the previous section, and exp
 ### Interactions with `RangeTo`
 [interactions-with-rangeto]: #interactions-with-rangeto
 
+The `..<expr>` syntax is given special meaning within an array expression with higher precedence than the `RangeTo` operator. This only applies when the _fill expression_ is a direct child of the array expression. Other range operators are unaffected. This means that the following hold:
+``` Rust
+let x: [u32; 6] = [1, 2, 3, ..0]; // Interpreted as a fill expression, not a range expression
+assert_eq!(x, [1, 2, 3, 0, 0, 0]);
+
+let x: [u32; 3] = [..2]; // Interpreted as a fill expression, not a range expression
+assert_eq!(x, [2, 2, 2]);
+
+// Other range expressions are unaffected
+assert_eq!([0..2], [Range { start: 0, end: 2 }]);
+assert_eq!([..], [RangeFull]);
+assert_eq!([2..], [RangeFrom { start: 2 }]);
+assert_eq!([0..=2], [RangeInclusive::new(0, 2)]);
+assert_eq!([..=2], [RangeToInclusive { end: 2 }]);
+```
+
+When not a direct child of the array expression, the `RangeTo` operator is unaffected. That is, subexpressions and parenthesized expressions are unaffected. Therefore the following also hold:
+``` Rust
+// Parentheses prevent the expression from being treated as a fill expression.
+assert_eq!([(..2)], [RangeTo { end: 2 }]);
+
+// Subexpressions of an element are also treated normally.
+let x: [RangeTo<u32>; 2] = [.. ..2]; // `RangeTo` expression within a fill expression
+assert_eq!(x, [RangeTo { end: 2 }, RangeTo { end: 2 }]);
+assert_eq!([{ ..2 }], [RangeTo { end: 2 }]); // `RangeTo` expression within a brace expression
+```
+
 # Drawbacks
 [drawbacks]: #drawbacks
 
