@@ -23,6 +23,8 @@ Why are we doing this? What use cases does it support? What is the expected outc
 
 ---
 
+### Parity with Other Languages
+
 In C and C++, it is common to define arrays by their first few elements, letting the remainder be default-initialized, like so:
 ``` C++
 int int_array[6] = {1, 2, 3}; // Final elements initialized to 0
@@ -38,6 +40,12 @@ This syntax is in fact more powerful than the C/C++ version in that it supports 
 ``` Rust
 let mostly_some: [Option<f32>; 100] = [Some(0.0), Some(1.0), None, ..Some(-1.0)];
 ```
+
+### Code readability
+
+Repetion in code can both be a source of bugs and reduce the readability of the code. A large array wherein most of the elements are identical is not currently obvious with the existing syntax. A reader of the code would be required to scan the entire array to determine any deviance.
+
+The proposed syntax makes this both more convenient when writing such code and more clear when reading such code.
 
 # Guide-level explanation
 [guide-level-explanation]: #guide-level-explanation
@@ -63,6 +71,9 @@ This is the technical portion of the RFC. Explain the design in sufficient detai
 
 The section should return to the examples given in the previous section, and explain more fully how the detailed proposal makes those examples work.
 
+### Interactions with `RangeTo`
+[interactions-with-rangeto]: #interactions-with-rangeto
+
 # Drawbacks
 [drawbacks]: #drawbacks
 
@@ -70,9 +81,21 @@ Why should we *not* do this?
 
 ---
 
-- Breaks arrays of RangeTo (`[..1, ..2, ..3]`)
-- Doesn't work in pattern position (unexpectedly due to unstable half-open range patterns; RangeTo doesn't work unparenthesized in patterns)
-- Only affects a single run of identical elements at the end of an array (can't do `[1, ..2, ..3]`)
+### Breakage
+
+The biggest drawback is that this is a breaking change. As discussed [above](#interactions-with-rangeto), existing code using arrays of `RangeTo` literals would conflict with this syntax and fail to compile. To our knowledge, such code is used extremely rarely and can easily be fixed. The exact interactions are detailed above.
+
+### Inferred Lengths
+
+The proposed syntax hides the actual length of an array literal. Unlike the two existing array forms (`[1, 2, 3]` and `[true; 5]`), the length of the array cannot be determined from the expression alone. This can hinder readability. However, in use cases where one would prefer the fill-syntax, the only alternative is a fully expanded array of sufficient length that this information is effectively hidden from the reader anyway. In such cases, explicit type annotations can be used.
+
+This would also complicate the compiler's job of type inference.
+
+### Limitations
+
+This syntax does not work in pattern positions, where it conflicts with unstable half-open range patterns. However, precedence for such differences between expressions and patterns exists. Both `RangeTo` literals and repeat-style array literals (e.g. `[true; 5]`) cannot appear in patterns, so it is reasonable to expect that fill-style array literals (as proposed here) also cannot.
+
+This syntax does not afford extensions to arbitrary run-length encoded arrays, as described in the [alternatives](#alternatives).
 
 # Rationale and alternatives
 [rationale-and-alternatives]: #rationale-and-alternatives
@@ -83,8 +106,14 @@ Why should we *not* do this?
 
 ---
 
+### Rationale
+
 - Reflective of the update-syntax in struct expressions.
 - Currently not possible with `macro_rules!` since "repeat N times" is not expressible. Possibly with macros 2.0?
+
+### Alternatives
+[alternatives]: #alternatives
+
 - A more general syntax for run-length encoding array literals. This would solve the earlier drawback of multiple runs. However, in the real world, most cases involving multiple runs would require sufficient granularity that such a feature would provide little benefit.
 
 # Prior art
