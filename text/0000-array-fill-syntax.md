@@ -60,6 +60,33 @@ Explain the proposal as if it was already included in the language and you were 
 
 For implementation-oriented RFCs (e.g. for compiler internals), this section should focus on how compiler contributors should think about the change, and give examples of its concrete impact. For policy RFCs, this section should provide an example-driven introduction to the policy, and explain its impact in concrete terms.
 
+---
+
+An array expression can be written by enclosing zero or more comma-separated expressions of uniform type in square brackets. This produces an array containing each of these values in the order they are written. Such an array expression can optionally be terminated with an element of the form `..<expr>`, where `<expr>` is of the same type as the preceeding elements. This appends zero or more copies of `expr` (the _fill expression_) to the produced array. The length of the array is at least the number of elements before the fill expression, and is determined exactly by type inference.
+
+If the fill expression fills more than one element, then the element type must be `Copy`. The fill expression is evaluated exactly once and moved or copied to the necessary number of elements.
+
+For example:
+``` Rust
+let x: [i32; 6] = [1, 2, 3, ..0]; // The last 3 elements are 0
+assert_eq!(x, [1, 2, 3, 0, 0, 0]);
+```
+
+This becomes useful when dealing with many repeated elements or when the elements are complex:
+``` Rust
+let x: [(Option<f32>, usize, bool); 20] = [
+    (Some(1.0), 0x42, true),
+    (None, 0x1a, false),
+    ..(Some(0.4), 0xfe, true) // This term is repeated 18 times
+];
+```
+
+It is possible for the fill expression to not fill any elements in the array:
+``` Rust
+let x: [char; 5] = ['H', 'e', 'l', 'l', 'o', ..'\0']; // All elements are already specified
+assert_eq!(x, ['H', 'e', 'l', 'l', 'o']);
+```
+
 # Reference-level explanation
 [reference-level-explanation]: #reference-level-explanation
 
