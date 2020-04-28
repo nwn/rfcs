@@ -98,6 +98,138 @@ This is the technical portion of the RFC. Explain the design in sufficient detai
 
 The section should return to the examples given in the previous section, and explain more fully how the detailed proposal makes those examples work.
 
+---
+
+This proposal does not affect the other types of array expressions: fully expanded array expressions without a fill expression  and repeat-style array expressions still behave exactly the same. This instead introduces a third type of array expression.
+
+### Desugaring
+
+The examples in the guide-level explanation can be considered to desugar as follows:
+``` Rust
+let x: [i32; 6] = [1, 2, 3, ..0]; // This desugars to the expression below.
+
+let x: [i32; 6] = {
+    let elem_0 = 1;
+    let elem_1 = 2;
+    let elem_2 = 3;
+    let elem_fill = 0;
+    [elem_0, elem_1, elem_2, elem_fill, elem_fill, elem_fill]
+};
+```
+
+``` Rust
+let x: [(Option<f32>, usize, bool); 20] = [
+    (Some(1.0), 0x42, true),
+    (None, 0x1a, false),
+    ..(Some(0.4), 0xfe, true)
+]; // This desugars to the expression below.
+
+let x: [(Option<f32>, usize, bool); 20] = {
+    let elem_0 = (Some(1.0), 0x42, true);
+    let elem_1 = (None, 0x1a, false);
+    let elem_fill = (Some(0.4), 0xfe, true);
+    [elem_0, elem_1, elem_fill, elem_fill, elem_fill,
+     elem_fill, elem_fill, elem_fill, elem_fill, elem_fill,
+     elem_fill, elem_fill, elem_fill, elem_fill, elem_fill,
+     elem_fill, elem_fill, elem_fill, elem_fill, elem_fill]
+};
+```
+
+``` Rust
+let x: [char; 5] = ['H', 'e', 'l', 'l', 'o', ..'\0']; // This desugars to the expression below.
+
+let x: [char; 5] = {
+    let elem_0 = 'H';
+    let elem_1 = 'e';
+    let elem_2 = 'l';
+    let elem_3 = 'l';
+    let elem_4 = 'o';
+    let _elem_fill = '\0'; // The fill expression still gets evaluated
+    [elem_0, elem_1, elem_2, elem_3, elem_4]
+};
+```
+
+Note that the fill expression is evaluated exactly once, even if it fills no elements. This matches the behaviour of repeat-style arrays of length 0. An array containing only a fill expression behaves exactly like a repeat-style array expression of the same length. This means the following are also equivalent:
+``` Rust
+let x: [bool; 0] = [ ..{ println!("Side effects"); true } ];
+let x: [bool; 0] = [ { println!("Side effects"); true }; 0 ];
+let x: [bool; 0] = {
+    let _elem_fill = { println!("Side effects"); true };
+    []
+};
+```
+
+### Length Inference
+
+The length of an array expression with a fill expression is determined by type inference:
+
+- If an exact length can be _uniquely_ determined from the surrounding program context, the array expression has that length.
+- If the program context under-constrains or over-constrains the length, it is considered a static type error.
+
+So this (in isolation) is a type error:
+``` Rust
+let x = [..true]; // Length is under-constrained
+```
+This is also a type error:
+``` Rust
+let x = [..true]; // Length is determined from uses of `x`
+let y: [bool; 3] = x; // Fixes length of `x` to 3
+let z: [bool; 4] = x; // Error: array length mismatch
+```
+But this is valid:
+``` Rust
+let x: [[bool; 4]; 2] = [[..true], [true, ..false]]; // Each sub-array has length 4
+```
+
+#### Errors
+Several errors can arise when using this feature.
+
+- If the length is under-constrained as in the following code:
+  ``` Rust
+  let x = [..true];
+  ```
+  the following error is produced:
+  ``` Rust
+  error[E0282]: type annotations needed
+   --> src/main.rs:4:9
+    |
+  4 |     let x = [..true];
+    |         ^   ^^^^^^^^
+    |         |   |
+    |         |   cannot infer length for array
+    |         help: consider giving `x` a type
+  ```
+- If the length has not yet been fixed, a type mismatch yields a slightly different error as follows:
+  ``` Rust
+  let x: [bool; 3] = [true, false, true, false, ..true];
+  ```
+  yields:
+  ``` Rust
+  error[E0308]: mismatched types
+   --> src/main.rs:4:24
+    |
+  4 |     let x: [bool; 3] = [true, false, true, false, ..true];
+    |            ---------   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected an array with a fixed size of 3 elements, found one with at least 4 elements
+    |            |
+    |            expected due to this
+  ```
+- Once a length has been assigned to a filled array expression, array length errors act as normal. The following code:
+  ``` Rust
+  let x = [..true];
+  let y: [bool; 3] = x;
+  let z: [bool; 4] = x;
+  ```
+  yields the following error:
+  ``` Rust
+  error[E0308]: mismatched types
+    --> src/main.rs:10:22
+     |
+  10 |     let z: [bool; 4] = x;
+     |            ---------   ^ expected an array with a fixed size of 4 elements, found one with 3 elements
+     |            |
+     |            expected due to this
+  ```
+
 ### Interactions with `RangeTo`
 [interactions-with-rangeto]: #interactions-with-rangeto
 
