@@ -1,4 +1,4 @@
-- Feature Name: `array-fill-syntax`
+- Feature Name: `array_expansion_syntax`
 - Start Date: 2020-03-26
 - RFC PR: [rust-lang/rfcs#0000](https://github.com/rust-lang/rfcs/pull/0000)
 - Rust Issue: [rust-lang/rust#0000](https://github.com/rust-lang/rust/issues/0000)
@@ -6,36 +6,70 @@
 # Summary
 [summary]: #summary
 
-Allow shorthand syntax for array literals with the same element repeated at the end. For example:
+Allow shorthand syntax for inserting a subarray into an array literal. For example:
 ``` Rust
-let x: [i32; 6] = [1, 2, 3, ..0]; // The last 3 elements are 0
-assert_eq!(x, [1, 2, 3, 0, 0, 0]);
+let x = [3, 2, 1];
+let y = [4, ..x, 0]; // Insert the elements of `x` into the literal
+assert_eq!(y, [4, 3, 2, 1, 0]);
 ```
 
 # Motivation
 [motivation]: #motivation
 
-### Parity with Other Languages
+### The RLE pattern
 
 In C and C++, it is common to define arrays by their first few elements, letting the remainder be default-initialized, like so:
 ``` C++
 int int_array[6] = {1, 2, 3}; // Final elements initialized to 0
 array<string_view, 6> str_array = {"Hello", "World"}; // Final elements initialized to ""
 ```
-Rust currently has no analogous syntax. We propose to fill this gap with the following syntax:
+Rust currently has no analogous syntax. With this proposal, this gap could be filled like so:
 ``` Rust
-let int_array: [i32; 6] = [1, 2, 3, ..0];
-let str_array: [&str; 6] = ["Hello", "World", ..""];
+let int_array = [1, 2, 3, ..[0; 3]];
+let str_array = ["Hello", "World", ..[""; 4]];
 ```
 
-This syntax is in fact more powerful than the C/C++ version in that it supports arbitrary `Copy` values to be filled into the array:
+This syntax is in fact more powerful than the C/C++ version in that arbitrary values can be inserted into the array, rather than just repeating the default-initialized value.
 ``` Rust
-let mostly_some: [Option<f32>; 100] = [Some(0.0), Some(1.0), None, ..Some(-1.0)];
+let alt = [Some(1.0), None];
+let seq = [..alt, ..alt, ..alt];
 ```
 
-### Code readability
+Moreover, it allows multiple expansions to occur anywhere within an array literal. This effectively allows a run-length encoding of array literals:
+``` Rust
+let rle = [1, ..[0; 32], 2, 3, 4, ..[-1; 28]];
+```
 
-Repetition in code can both be a source of bugs and reduce the readability of the code. A large array wherein most of the elements are identical is not currently obvious with the existing syntax. A reader of the code would be required to scan the entire array to determine any deviance.
+``` Rust
+let zimin0 = [0];
+let zimin1 = [..zimin0, 1, ..zimin0];
+let zimin2 = [..zimin1, 2, ..zimin1];
+let zimin3 = [..zimin2, 3, ..zimin2];
+assert_eq!(zimin3, [0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0]);
+```
+
+Either of the above examples using the existing syntax would require care both when transcribing and when reading for patterns.
+
+Repetition in code can both be a source of bugs and reduce the readability of the code. A large array with many repeated elements is not currently obvious with the existing syntax. A reader of the code would be required to scan the entire array to determine any deviance.
+
+Similar problems occur when defining subarrays, where separately defined literals can be less readable and can easily fall out of sync.
+``` Rust
+const PNG_HEADER: [u8; 8] = [ 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a ];
+const PNG_IHDR: [u8; 4] = [ 0x49, 0x48, 0x44, 0x52 ];
+const PNG_IDAT: [u8; 4] = [ 0x49, 0x44, 0x41, 0x54 ];
+const PNG_IEND: [u8; 4] = [ 0x49, 0x45, 0x4e, 0x44 ];
+const IMAGE: [u8; 76] = [
+    ..PNG_HEADER,
+    0x00, 0x00, 0x00, 0x0d, ..PNG_IHDR,
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00,
+    0x37, 0x6e, 0xf9, 0x24,
+    0x00, 0x00, 0x00, 0x10, ..PNG_IDAT,
+    0x78, 0x9c, 0x62, 0x60, 0x01, 0x00, 0x00, 0x00, 0xff, 0xff, 0x03, 0x00, 0x00, 0x06, 0x00, 0x05,
+    0x57, 0xbf, 0xab, 0xd4,
+    0x00, 0x00, 0x00, 0x00, ..PNG_IEND,
+    0xae, 0x42, 0x60, 0x82,
+];
+```
 
 The proposed syntax makes this both more convenient when writing such code and more clear when reading such code.
 
@@ -274,9 +308,15 @@ The proposed syntax was chosen mainly for its familiarity. It is more intuitive 
 # Prior art
 [prior-art]: #prior-art
 
-As described [above](#motivation), a similar feature is present in C and C++. In C, missing elements in an initializer are implicitly initialized to zero (NULL, etc.). C++ improves on this design by default-initializing any missing elements, allowing for more complex types in this position.
+### Javascript
+Javascript has a similar, though less restrictive, feature in its [spread syntax](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Spread_syntax), which allows arbitrary iterables to be expanded to discrete arguments to a function call or elements to an array literal. The spread syntax also works for object expressions, where it acts similarly to Rust's `struct` update (FRU) syntax.
 
-Both C and C++ suffer from the problem that arrays are _silently_ and _implicitly_ filled when elements are missing. This can lead to unexpected behaviour and bugs. Still, the convenience of this feature means that it continues to be used frequently. The proposed feature solves this problem while improving usability by making the behaviour explicit and opt-in, and by using only a user-defined value.
+This proposal can be thought to similarly extend Rust's existing "spread" syntax to the context of array literals.
+
+### C and C++
+As described [above](#motivation), a comparable feature is present in C and C++. In C, missing elements in an initializer are implicitly initialized to zero (NULL, etc.). C++ improves on this design by default-initializing any missing elements, allowing for more complex types in this position.
+
+Both C and C++ suffer from the problem that arrays are _silently_ and _implicitly_ filled when elements are missing. This can lead to unexpected behaviour and bugs. Still, the convenience of this feature means that it continues to be used frequently. The proposed feature solves this problem while improving usability by making the behaviour explicit and opt-in, and by using only user-defined values.
 
 # Unresolved questions
 [unresolved-questions]: #unresolved-questions
