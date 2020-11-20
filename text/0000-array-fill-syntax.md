@@ -16,6 +16,26 @@ assert_eq!(y, [4, 3, 2, 1, 0]);
 # Motivation
 [motivation]: #motivation
 
+### Simpler array definitions
+
+Concatenation is a fundamental operation of arrays. Yet in current Rust, there's no way to express array concatenation at compile time. Even with the eventual stabilization of `const` library features like `copy_from_slice`, the user must specify the length of the resulting array, which is not necessarily known to them (though it is always to the compiler).
+
+For example, consider the concatenation of two run-time evaluated arrays. Even leaving aside the actual concatenation, the length of the resulting array cannot be determined by the user at compile time.
+``` Rust
+let a = compute_a();
+let b = compute_b();
+let c: [u8; a.len() + b.len()] = concat_arrays(a, b);
+//          ~~~~~~~~~~~~~~~~~
+//           Error: attempt to use a non-constant value in a constant
+```
+Since the contents of `a` and `b` are not known at compile time, we are unable to obtain their combined length, though this is known to the compiler. This proposal would allow the user to leverage the compiler to sidestep this issue entirely.
+``` Rust
+let a = compute_a();
+let b = compute_b();
+let c = [..a, ..b];
+```
+This syntax aims to provide an intuitive and generalized notation for building arrays from their constituents.
+
 ### The RLE pattern
 
 In C and C++, it is common to define arrays by their first few elements, letting the remainder be default-initialized, like so:
@@ -50,7 +70,9 @@ assert_eq!(zimin3, [0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0]);
 
 Either of the above examples using the existing syntax would require care both when transcribing and when reading for patterns.
 
-Repetition in code can both be a source of bugs and reduce the readability of the code. A large array with many repeated elements is not currently obvious with the existing syntax. A reader of the code would be required to scan the entire array to determine any deviance.
+### Less redundancy
+
+Repetition in code can lead to bugs and reduce the readability of the code. A large array with many repeated elements is not currently obvious with the existing syntax. A reader of the code would be required to scan the entire array to determine any deviance.
 
 Similar problems occur when defining subarrays, where separately defined literals can be less readable and can easily fall out of sync.
 ``` Rust
@@ -71,7 +93,7 @@ const IMAGE: [u8; 76] = [
 ];
 ```
 
-The proposed syntax makes this both more convenient when writing such code and more clear when reading such code.
+The proposed syntax makes such code more convenient to write and more clear to read.
 
 # Guide-level explanation
 [guide-level-explanation]: #guide-level-explanation
@@ -271,39 +293,25 @@ assert_eq!([{ ..2 }], [RangeTo { end: 2 }]); // `RangeTo` expression within a br
 
 ### Breakage
 
-The biggest drawback is that this is a breaking change. As discussed [above](#interactions-with-rangeto), existing code using arrays of `RangeTo` literals would conflict with this syntax and fail to compile. To our knowledge, such code is used extremely rarely and can easily be fixed. The exact interactions are detailed above.
-
-### Inferred Lengths
-
-The proposed syntax hides the actual length of an array literal. Unlike the two existing array forms (`[1, 2, 3]` and `[true; 5]`), the length of the array cannot be determined from the expression alone. This can hinder readability. However, in use cases where one would prefer the fill-syntax, the only alternative is a fully expanded array of sufficient length that this information is effectively hidden from the reader anyway. In such cases, explicit type annotations can be used.
-
-This would also complicate the compiler's job of type inference.
+The biggest drawback is that this is a breaking change to the language. As discussed [above](#interactions-with-rangeto), existing code using arrays of `RangeTo` literals would conflict with this syntax and fail to compile. To our knowledge, such code is used extremely rarely and can easily be fixed. The exact interactions are detailed above.
 
 ### Limitations
 
-This syntax does not work in pattern positions, where it conflicts with unstable half-open range patterns. However, precedence for such differences between expressions and patterns exists. Both `RangeTo` literals and repeat-style array literals (e.g. `[true; 5]`) cannot appear in patterns, so it is reasonable to expect that fill-style array literals (as proposed here) also cannot.
-
-This syntax does not afford extensions to arbitrary run-length encoded arrays, as described in the [alternatives](#alternatives).
+This syntax does not work in pattern positions, where it conflicts with unstable half-open range patterns. However, precedence for such differences between expressions and patterns exists. Both `RangeTo` literals and repeat-style array literals (e.g. `[true; 5]`) cannot appear in patterns, so it is not too surprising that fill-style array literals (as proposed here) also cannot.
 
 # Rationale and alternatives
 [rationale-and-alternatives]: #rationale-and-alternatives
 
 ### Rationale
 
-The proposed syntax was chosen mainly for its familiarity. It is more intuitive for newcomers since the `..` acts similarly to the ellipsis in both English and mathematical notation. It also reflects the meaning of the `..` in the struct update syntax, namely "copy/move the remaining fields/elements from what follows".
+The proposed syntax was chosen mainly for its familiarity. It reflects the meaning of the `..` in the struct update syntax, namely "copy/move fields/elements from what follows". It should also be intuitive for newcomers from Javascript since the `..` acts similarly to the `...` in Javascript's spread syntax.
 
 ### Alternatives
 [alternatives]: #alternatives
 
-- Implementing this as a macro in either std or an external crate. Not sure if this is actually possible for compile-time evaluation without `const` loops.
+- Implementing this as a macro in either std or an external crate. This may not currently be possible due to the lengths of non-`const` arrays not being available in `const` contexts. ([For example](https://play.rust-lang.org/?version=nightly&mode=debug&edition=2018&gist=4d8bc434e45aa2103ab874b873359dc4))
 
-- An alternative syntax:
-  - Extend the repeat-syntax instead of the expanded syntax. This makes the length explicit, but the syntax would be less intuitive and noticeable: \
-    `assert_eq!([1, 2, 3, 3, 3], [1, 2, 3; 5])` or \
-    `assert_eq!([1, 2, 3, 3, 3], [1, 2, ..3; 5])`
-  - Use a syntax that doesn't conflict with `RangeTo`, e.g. `assert_eq!([1, 2, 3, 3, 3], [1, 2, 3...])` leveraging the existing (but unused) `...` token
-
-- A more general syntax for run-length encoding array literals. This would solve the earlier drawback of multiple runs. However, in the real world, most cases involving multiple runs would require sufficient granularity that such a feature would provide little benefit.
+- An alternative syntax that doesn't conflict with `RangeTo`, e.g. `assert_eq!([1, 2, 3, 3, 3], [1, 2, ...[3; 3]])` leveraging the existing (but unused) `...` token.
 
 # Prior art
 [prior-art]: #prior-art
@@ -314,7 +322,7 @@ Javascript has a similar, though less restrictive, feature in its [spread syntax
 This proposal can be thought to similarly extend Rust's existing "spread" syntax to the context of array literals.
 
 ### C and C++
-As described [above](#motivation), a comparable feature is present in C and C++. In C, missing elements in an initializer are implicitly initialized to zero (NULL, etc.). C++ improves on this design by default-initializing any missing elements, allowing for more complex types in this position.
+As described [above](#motivation), a related feature is present in C and C++. In C, missing elements in an initializer are implicitly initialized to zero (NULL, etc.). C++ improves on this design by default-initializing any missing elements, allowing for more complex types in this position.
 
 Both C and C++ suffer from the problem that arrays are _silently_ and _implicitly_ filled when elements are missing. This can lead to unexpected behaviour and bugs. Still, the convenience of this feature means that it continues to be used frequently. The proposed feature solves this problem while improving usability by making the behaviour explicit and opt-in, and by using only user-defined values.
 
@@ -322,12 +330,10 @@ Both C and C++ suffer from the problem that arrays are _silently_ and _implicitl
 [unresolved-questions]: #unresolved-questions
 
 - Is this the best syntax for such a feature?
-- Should we (or Clippy) warn when a fill expression would expand to 0 entries? \
-  Allowing this could have valid use cases and aligns with the lack of warning when a base struct contributes no fields.
-- Should this allow `!Copy` types if the expression does not expand to more than one entry? \
-  This aligns with the `[vec![]; 1]` syntax.
+- Could this be implemented as a macro?
 
 # Future possibilities
 [future-possibilities]: #future-possibilities
 
-- This could be extended to allow middle-filling: `[1, 2, ..3, 2, 1]`
+- This syntax can be implemented for dynamically-sized slices in the `vec!` macro.
+- The proposed syntax does not preclude any of the existing indexed array initializer proposals.
