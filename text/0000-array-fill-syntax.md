@@ -290,7 +290,7 @@ When not a direct child of the array expression, the `RangeTo` operator is unaff
 assert_eq!([(..2)], [RangeTo { end: 2 }]);
 
 // Subexpressions of an element are also treated normally.
-let x: [RangeTo<u32>; 1] = { ..2 }]; // `RangeTo` expression within a block expression
+let x: [RangeTo<u32>; 1] = [{ ..2 }]; // `RangeTo` expression within a block expression
 let x: [RangeTo<u32>; 2] = [.. ..2]; // `RangeTo` expression within an array expansion (parses, but yields a type error)
 ```
 
@@ -328,6 +328,10 @@ help: try using parentheses here:
   |                         ^^^^^
 ```
 
+### Further overloading `..`
+
+The proposed syntax adds yet another meaning to the `..` symbol, which some already consider too overloaded. Our hope here is to align with users' existing familiarity with `..` in struct update contexts, making this "expanding on a meaning" rather than "adding a meaning".
+
 ### Limitations
 
 This syntax does not work in pattern positions, where it conflicts with unstable half-open range patterns. However, precedence for such differences between expressions and patterns exists. Both `RangeTo` literals and repeat-style array literals (e.g. `[true; 5]`) cannot appear in patterns, so it is not too surprising that array expansions (as proposed here) also cannot.
@@ -363,7 +367,7 @@ Both C and C++ suffer from the problem that arrays are _silently_ and _implicitl
 [unresolved-questions]: #unresolved-questions
 
 - Is this the best syntax for such a feature?
-- Could this be implemented as a macro?
+- Could this be implemented as a macro without loss of usability?
 - Are array expansions "transparent" to eventual length inference?
 
 # Future possibilities
